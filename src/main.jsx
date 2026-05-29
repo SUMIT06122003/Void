@@ -75,6 +75,8 @@ const productImageStyle = (product) => ({
   backgroundImage: `linear-gradient(180deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.22)), url("${product.image}")`,
 });
 
+const cartKeyFor = (product, size) => `${product.id}-${size}`;
+
 const categories = ['All', 'T-shirt', 'Shorts', 'Socks', 'Gym Essentials'];
 const demoUser = { email: 'demo@voidactivewear.com', password: 'demo123', name: 'Demo Athlete' };
 
@@ -120,28 +122,29 @@ function App() {
     }, 360);
   };
 
-  const addToCart = (product) => {
+  const addToCart = (product, size = product.sizes[0]) => {
+    const cartKey = cartKeyFor(product, size);
     setCart((items) => {
-      const existing = items.find((item) => item.product.id === product.id);
+      const existing = items.find((item) => item.cartKey === cartKey);
       if (existing) {
         return items.map((item) =>
-          item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item,
+          item.cartKey === cartKey ? { ...item, quantity: item.quantity + 1 } : item,
         );
       }
-      return [...items, { product, quantity: 1 }];
+      return [...items, { cartKey, product, quantity: 1, size }];
     });
     setCartOpen(true);
   };
 
-  const updateCartQuantity = (id, quantity) => {
+  const updateCartQuantity = (cartKey, quantity) => {
     setCart((items) =>
       items
-        .map((item) => (item.product.id === id ? { ...item, quantity: Math.max(0, quantity) } : item))
+        .map((item) => (item.cartKey === cartKey ? { ...item, quantity: Math.max(0, quantity) } : item))
         .filter((item) => item.quantity > 0),
     );
   };
 
-  const removeFromCart = (id) => setCart((items) => items.filter((item) => item.product.id !== id));
+  const removeFromCart = (cartKey) => setCart((items) => items.filter((item) => item.cartKey !== cartKey));
   const clearCart = () => setCart([]);
 
   const sharedProps = {
@@ -352,6 +355,12 @@ function ProductsPage({ activeCategory, addToCart, filteredProducts, navigate, s
 }
 
 function ProductDetailPage({ addToCart, navigate, selectedProduct }) {
+  const [selectedSize, setSelectedSize] = useState(selectedProduct.sizes[0]);
+
+  useEffect(() => {
+    setSelectedSize(selectedProduct.sizes[0]);
+  }, [selectedProduct]);
+
   return (
     <PageShell eyebrow={selectedProduct.category} title={selectedProduct.name}>
       <section className="product-detail">
@@ -371,7 +380,13 @@ function ProductDetailPage({ addToCart, navigate, selectedProduct }) {
           </div>
           <div className="size-row">
             {selectedProduct.sizes.map((size) => (
-              <span key={size}>{size}</span>
+              <button
+                key={size}
+                className={selectedSize === size ? 'active' : ''}
+                onClick={() => setSelectedSize(size)}
+              >
+                {size}
+              </button>
             ))}
           </div>
           <div className="price-row">
@@ -379,7 +394,7 @@ function ProductDetailPage({ addToCart, navigate, selectedProduct }) {
             <del>Rs. {selectedProduct.oldPrice.toLocaleString('en-IN')}</del>
           </div>
           <div className="detail-actions">
-            <button className="primary-link" onClick={() => addToCart(selectedProduct)}>
+            <button className="primary-link" onClick={() => addToCart(selectedProduct, selectedSize)}>
               <ShoppingBag size={18} /> Add to bag
             </button>
             <button className="secondary-dark" onClick={() => navigate('products')}>Back to products</button>
@@ -659,8 +674,8 @@ function CartPage({ cart, cartTotal, clearCart, navigate, removeFromCart, update
               <button className="primary-link" onClick={() => navigate('products')}>Shop products</button>
             </div>
           ) : (
-            cart.map(({ product, quantity }) => (
-              <article className="cart-row" key={product.id}>
+            cart.map(({ cartKey, product, quantity, size }) => (
+              <article className="cart-row" key={cartKey}>
                 <button
                   className={`cart-thumb visual-${product.id}`}
                   style={productImageStyle(product)}
@@ -670,15 +685,16 @@ function CartPage({ cart, cartTotal, clearCart, navigate, removeFromCart, update
                 <div>
                   <p>{product.category}</p>
                   <h2>{product.name}</h2>
+                  <small>Size: {size}</small>
                   <span>Rs. {product.price.toLocaleString('en-IN')}</span>
                 </div>
                 <QuantityControl
                   quantity={quantity}
-                  onDecrease={() => updateCartQuantity(product.id, quantity - 1)}
-                  onIncrease={() => updateCartQuantity(product.id, quantity + 1)}
+                  onDecrease={() => updateCartQuantity(cartKey, quantity - 1)}
+                  onIncrease={() => updateCartQuantity(cartKey, quantity + 1)}
                 />
                 <strong>Rs. {(product.price * quantity).toLocaleString('en-IN')}</strong>
-                <button className="remove-link" onClick={() => removeFromCart(product.id)}>Remove</button>
+                <button className="remove-link" onClick={() => removeFromCart(cartKey)}>Remove</button>
               </article>
             ))
           )}
@@ -791,7 +807,6 @@ function FeatureStrip({ expanded, setExpanded }) {
   return (
     <section className="feature-strip">
       <div className="photo-tile photo-one">
-        <span>Photo 1 Area</span>
       </div>
       <div className="feature-copy">
         <h2>Built for movement. Designed for stillness.</h2>
@@ -816,7 +831,6 @@ function FeatureStrip({ expanded, setExpanded }) {
         </div>
       </div>
       <div className="photo-tile photo-two">
-        <span>Photo 2 Area</span>
       </div>
     </section>
   );
@@ -832,6 +846,10 @@ function ProductSection({
   showFilters,
   title,
 }) {
+  const [selectedSizes, setSelectedSizes] = useState({});
+
+  const selectedSizeFor = (product) => selectedSizes[product.id] || product.sizes[0];
+
   return (
     <section className="shop-section">
       <div className="section-heading">
@@ -883,14 +901,20 @@ function ProductSection({
               </div>
               <div className="size-row">
                 {product.sizes.map((size) => (
-                  <span key={size}>{size}</span>
+                  <button
+                    key={size}
+                    className={selectedSizeFor(product) === size ? 'active' : ''}
+                    onClick={() => setSelectedSizes((sizes) => ({ ...sizes, [product.id]: size }))}
+                  >
+                    {size}
+                  </button>
                 ))}
               </div>
               <div className="price-row">
                 <strong>Rs. {product.price.toLocaleString('en-IN')}</strong>
                 <del>Rs. {product.oldPrice.toLocaleString('en-IN')}</del>
               </div>
-              <button className="add-button" onClick={() => addToCart(product)}>
+              <button className="add-button" onClick={() => addToCart(product, selectedSizeFor(product))}>
                 <ShoppingBag size={18} /> Add to bag
               </button>
             </div>
@@ -975,19 +999,20 @@ function BagPanel({ cart, cartOpen, cartTotal, clearCart, navigate, removeFromCa
           {cart.length === 0 ? (
             <p>Your bag is ready for the first standard.</p>
           ) : (
-            cart.map(({ product, quantity }) => (
-              <div className="bag-item" key={product.id}>
+            cart.map(({ cartKey, product, quantity, size }) => (
+              <div className="bag-item" key={cartKey}>
                 <div className={`bag-thumb visual-${product.id}`} style={productImageStyle(product)} />
                 <div className="bag-copy">
                   <span>{product.name}</span>
+                  <small>Size: {size}</small>
                   <small>Rs. {product.price.toLocaleString('en-IN')}</small>
                   <QuantityControl
                     quantity={quantity}
-                    onDecrease={() => updateCartQuantity(product.id, quantity - 1)}
-                    onIncrease={() => updateCartQuantity(product.id, quantity + 1)}
+                    onDecrease={() => updateCartQuantity(cartKey, quantity - 1)}
+                    onIncrease={() => updateCartQuantity(cartKey, quantity + 1)}
                   />
                 </div>
-                <button onClick={() => removeFromCart(product.id)} aria-label={`Remove ${product.name}`}>
+                <button onClick={() => removeFromCart(cartKey)} aria-label={`Remove ${product.name}`}>
                   <X size={15} />
                 </button>
               </div>
