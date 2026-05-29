@@ -31,6 +31,7 @@ const products = [
     colors: ['#f5f5ef', '#202020', '#8f9890'],
     sizes: ['S', 'M', 'L', 'XL'],
     tag: 'Core',
+    image: '/Tshirt.jpg',
   },
   {
     id: 2,
@@ -42,6 +43,7 @@ const products = [
     colors: ['#171717', '#d7d1c6', '#5f6a72'],
     sizes: ['M', 'L', 'XL'],
     tag: 'Sale',
+    image: '/shorts.jpg',
   },
   {
     id: 3,
@@ -53,6 +55,7 @@ const products = [
     colors: ['#dbeafe', '#111827', '#e2e8f0'],
     sizes: ['650ml', '850ml'],
     tag: 'Hydrate',
+    image: '/shaker.jpg',
   },
   {
     id: 4,
@@ -64,8 +67,13 @@ const products = [
     colors: ['#ffffff', '#1f2937', '#cbd5e1'],
     sizes: ['UK 6-8', 'UK 9-11'],
     tag: '2 Pack',
+    image: '/socks.jpg',
   },
 ];
+
+const productImageStyle = (product) => ({
+  backgroundImage: `linear-gradient(180deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.22)), url("${product.image}")`,
+});
 
 const categories = ['All', 'T-shirt', 'Shorts', 'Socks', 'Gym Essentials'];
 const demoUser = { email: 'demo@voidactivewear.com', password: 'demo123', name: 'Demo Athlete' };
@@ -75,6 +83,7 @@ function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState('All');
   const [cart, setCart] = useState([]);
+  const [cartOpen, setCartOpen] = useState(false);
   const [newsletter, setNewsletter] = useState('');
   const [expanded, setExpanded] = useState('Fit');
   const [user, setUser] = useState(null);
@@ -95,7 +104,8 @@ function App() {
     [activeCategory],
   );
 
-  const cartTotal = cart.reduce((sum, product) => sum + product.price, 0);
+  const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const cartTotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
 
   const navigate = (nextPage, product) => {
     if (product) {
@@ -110,14 +120,29 @@ function App() {
     }, 360);
   };
 
-  const addToCart = (product) => setCart((items) => [...items, product]);
-
-  const removeFromCart = (id) => {
-    const index = cart.findIndex((product) => product.id === id);
-    if (index >= 0) {
-      setCart((items) => items.filter((_, itemIndex) => itemIndex !== index));
-    }
+  const addToCart = (product) => {
+    setCart((items) => {
+      const existing = items.find((item) => item.product.id === product.id);
+      if (existing) {
+        return items.map((item) =>
+          item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item,
+        );
+      }
+      return [...items, { product, quantity: 1 }];
+    });
+    setCartOpen(true);
   };
+
+  const updateCartQuantity = (id, quantity) => {
+    setCart((items) =>
+      items
+        .map((item) => (item.product.id === id ? { ...item, quantity: Math.max(0, quantity) } : item))
+        .filter((item) => item.quantity > 0),
+    );
+  };
+
+  const removeFromCart = (id) => setCart((items) => items.filter((item) => item.product.id !== id));
+  const clearCart = () => setCart([]);
 
   const sharedProps = {
     activeCategory,
@@ -140,10 +165,11 @@ function App() {
   return (
     <div className="app">
       <Header
-        cartCount={cart.length}
+        cartCount={cartCount}
         menuOpen={menuOpen}
         navigate={navigate}
         page={page}
+        setCartOpen={setCartOpen}
         setMenuOpen={setMenuOpen}
         user={user}
       />
@@ -161,9 +187,19 @@ function App() {
           {page === 'login' && <LoginPage navigate={navigate} setUser={setUser} user={user} />}
           {page === 'register' && <RegisterPage navigate={navigate} setUser={setUser} user={user} />}
           {page === 'profile' && <ProfilePage navigate={navigate} setUser={setUser} user={user} />}
-          {page === 'account' && <AccountPage cart={cart} cartTotal={cartTotal} navigate={navigate} setUser={setUser} user={user} />}
+          {page === 'cart' && <CartPage cart={cart} cartTotal={cartTotal} clearCart={clearCart} navigate={navigate} removeFromCart={removeFromCart} updateCartQuantity={updateCartQuantity} />}
+          {page === 'account' && <AccountPage cartCount={cartCount} cartTotal={cartTotal} navigate={navigate} setUser={setUser} user={user} />}
         </div>
-        <BagPanel cart={cart} cartTotal={cartTotal} removeFromCart={removeFromCart} />
+        <BagPanel
+          cart={cart}
+          cartOpen={cartOpen}
+          cartTotal={cartTotal}
+          clearCart={clearCart}
+          navigate={navigate}
+          removeFromCart={removeFromCart}
+          setCartOpen={setCartOpen}
+          updateCartQuantity={updateCartQuantity}
+        />
       </main>
 
       <Footer navigate={navigate} newsletter={newsletter} setNewsletter={setNewsletter} />
@@ -171,7 +207,7 @@ function App() {
   );
 }
 
-function Header({ cartCount, menuOpen, navigate, page, setMenuOpen, user }) {
+function Header({ cartCount, menuOpen, navigate, page, setCartOpen, setMenuOpen, user }) {
   const navItems = [
     ['home', 'Home'],
     ['products', 'Products'],
@@ -198,7 +234,7 @@ function Header({ cartCount, menuOpen, navigate, page, setMenuOpen, user }) {
         <button className="icon-button" onClick={() => navigate('search')} aria-label="Search">
           <Search size={19} />
         </button>
-        <button className="cart-button" aria-label={`${cartCount} cart items`}>
+        <button className="cart-button" onClick={() => setCartOpen(true)} aria-label={`${cartCount} cart items`}>
           <ShoppingBag size={19} />
           <span>{cartCount}</span>
         </button>
@@ -319,7 +355,7 @@ function ProductDetailPage({ addToCart, navigate, selectedProduct }) {
   return (
     <PageShell eyebrow={selectedProduct.category} title={selectedProduct.name}>
       <section className="product-detail">
-        <div className={`product-detail-visual visual-${selectedProduct.id}`}>
+        <div className={`product-detail-visual visual-${selectedProduct.id}`} style={productImageStyle(selectedProduct)}>
           <span>{selectedProduct.tag}</span>
         </div>
         <div className="product-detail-copy">
@@ -608,7 +644,61 @@ function ProfilePage({ navigate, setUser, user }) {
   );
 }
 
-function AccountPage({ cart, cartTotal, navigate, setUser, user }) {
+function CartPage({ cart, cartTotal, clearCart, navigate, removeFromCart, updateCartQuantity }) {
+  const shipping = cartTotal > 0 ? 0 : 0;
+  const grandTotal = cartTotal + shipping;
+
+  return (
+    <PageShell eyebrow="Cart" title="Review your VOID bag.">
+      <section className="cart-page">
+        <div className="cart-list">
+          {cart.length === 0 ? (
+            <div className="empty-cart">
+              <h2>Your bag is empty.</h2>
+              <p>Add a VOID standard to start checkout.</p>
+              <button className="primary-link" onClick={() => navigate('products')}>Shop products</button>
+            </div>
+          ) : (
+            cart.map(({ product, quantity }) => (
+              <article className="cart-row" key={product.id}>
+                <button
+                  className={`cart-thumb visual-${product.id}`}
+                  style={productImageStyle(product)}
+                  onClick={() => navigate('product', product)}
+                  aria-label={`View ${product.name}`}
+                />
+                <div>
+                  <p>{product.category}</p>
+                  <h2>{product.name}</h2>
+                  <span>Rs. {product.price.toLocaleString('en-IN')}</span>
+                </div>
+                <QuantityControl
+                  quantity={quantity}
+                  onDecrease={() => updateCartQuantity(product.id, quantity - 1)}
+                  onIncrease={() => updateCartQuantity(product.id, quantity + 1)}
+                />
+                <strong>Rs. {(product.price * quantity).toLocaleString('en-IN')}</strong>
+                <button className="remove-link" onClick={() => removeFromCart(product.id)}>Remove</button>
+              </article>
+            ))
+          )}
+        </div>
+
+        <aside className="checkout-summary">
+          <h2>Order Summary</h2>
+          <div><span>Subtotal</span><strong>Rs. {cartTotal.toLocaleString('en-IN')}</strong></div>
+          <div><span>Shipping</span><strong>{cartTotal > 0 ? 'Free' : 'Rs. 0'}</strong></div>
+          <div className="summary-total"><span>Total</span><strong>Rs. {grandTotal.toLocaleString('en-IN')}</strong></div>
+          <button className="primary-link" disabled={cart.length === 0}>Demo checkout</button>
+          <button className="secondary-dark" onClick={() => navigate('products')}>Continue shopping</button>
+          {cart.length > 0 && <button className="remove-link" onClick={clearCart}>Clear cart</button>}
+        </aside>
+      </section>
+    </PageShell>
+  );
+}
+
+function AccountPage({ cartCount, cartTotal, navigate, setUser, user }) {
   if (!user) {
     return (
       <PageShell eyebrow="Account" title="Login to view your demo account.">
@@ -636,9 +726,9 @@ function AccountPage({ cart, cartTotal, navigate, setUser, user }) {
         </div>
         <div className="account-card">
           <h2>Current Bag</h2>
-          <p>{cart.length} items selected</p>
+          <p>{cartCount} items selected</p>
           <strong>Rs. {cartTotal.toLocaleString('en-IN')}</strong>
-          <button className="primary-link" onClick={() => navigate('products')}>Continue shopping</button>
+          <button className="primary-link" onClick={() => navigate('cart')}>Open cart</button>
         </div>
         <div className="account-card order-card">
           <h2>Demo Orders</h2>
@@ -769,6 +859,7 @@ function ProductSection({
           <article className="product-card" key={product.id}>
             <button
               className={`product-visual visual-${product.id}`}
+              style={productImageStyle(product)}
               onClick={() => navigate && navigate('product', product)}
               aria-label={`View ${product.name}`}
             >
@@ -846,32 +937,90 @@ function Services() {
   );
 }
 
-function BagPanel({ cart, cartTotal, removeFromCart }) {
+function QuantityControl({ onDecrease, onIncrease, quantity }) {
   return (
-    <aside className="bag-panel" aria-label="Shopping bag">
-      <div className="bag-header">
-        <strong>Bag</strong>
-        <span>{cart.length} items</span>
-      </div>
-      <div className="bag-items">
-        {cart.length === 0 ? (
-          <p>Your bag is ready for the first standard.</p>
-        ) : (
-          cart.map((product, index) => (
-            <div className="bag-item" key={`${product.id}-${index}`}>
-              <span>{product.name}</span>
-              <button onClick={() => removeFromCart(product.id)} aria-label={`Remove ${product.name}`}>
-                <X size={15} />
-              </button>
-            </div>
-          ))
-        )}
-      </div>
-      <div className="bag-total">
-        <span>Total</span>
-        <strong>Rs. {cartTotal.toLocaleString('en-IN')}</strong>
-      </div>
-    </aside>
+    <div className="quantity-control" aria-label="Quantity control">
+      <button onClick={onDecrease} aria-label="Decrease quantity">
+        <Minus size={15} />
+      </button>
+      <span>{quantity}</span>
+      <button onClick={onIncrease} aria-label="Increase quantity">
+        <Plus size={15} />
+      </button>
+    </div>
+  );
+}
+
+function BagPanel({ cart, cartOpen, cartTotal, clearCart, navigate, removeFromCart, setCartOpen, updateCartQuantity }) {
+  const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+
+  if (!cartOpen) {
+    return null;
+  }
+
+  return (
+    <div className="bag-overlay" role="presentation">
+      <button className="bag-backdrop" onClick={() => setCartOpen(false)} aria-label="Close cart" />
+      <aside className="bag-panel" aria-label="Shopping bag">
+        <div className="bag-header">
+          <div>
+            <strong>Bag</strong>
+            <span>{cartCount} items</span>
+          </div>
+          <button onClick={() => setCartOpen(false)} aria-label="Close cart">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="bag-items">
+          {cart.length === 0 ? (
+            <p>Your bag is ready for the first standard.</p>
+          ) : (
+            cart.map(({ product, quantity }) => (
+              <div className="bag-item" key={product.id}>
+                <div className={`bag-thumb visual-${product.id}`} style={productImageStyle(product)} />
+                <div className="bag-copy">
+                  <span>{product.name}</span>
+                  <small>Rs. {product.price.toLocaleString('en-IN')}</small>
+                  <QuantityControl
+                    quantity={quantity}
+                    onDecrease={() => updateCartQuantity(product.id, quantity - 1)}
+                    onIncrease={() => updateCartQuantity(product.id, quantity + 1)}
+                  />
+                </div>
+                <button onClick={() => removeFromCart(product.id)} aria-label={`Remove ${product.name}`}>
+                  <X size={15} />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+        <div className="bag-total">
+          <span>Total</span>
+          <strong>Rs. {cartTotal.toLocaleString('en-IN')}</strong>
+        </div>
+        <div className="bag-actions">
+          <button
+            className="primary-link"
+            onClick={() => {
+              setCartOpen(false);
+              navigate('cart');
+            }}
+          >
+            View cart
+          </button>
+          <button
+            className="secondary-dark"
+            onClick={() => {
+              setCartOpen(false);
+              navigate('products');
+            }}
+          >
+            Shop more
+          </button>
+          {cart.length > 0 && <button className="remove-link" onClick={clearCart}>Clear cart</button>}
+        </div>
+      </aside>
+    </div>
   );
 }
 
@@ -894,6 +1043,7 @@ function Footer({ navigate, newsletter, setNewsletter }) {
         {[
           ['home', 'Home'],
           ['products', 'Products'],
+          ['cart', 'Cart'],
           ['search', 'Search'],
           ['about', 'About Us'],
           ['contact', 'Contact Us'],
